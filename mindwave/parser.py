@@ -47,7 +47,7 @@ class ThinkGearParser(object):
             self.recorders += recorders
         self.input_data = ""
         self.parser = self.parse()
-        self.parser.next()
+        next(self.parser)
 
     def feed(self, data):
         for c in data:

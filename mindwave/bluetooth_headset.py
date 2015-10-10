@@ -12,8 +12,8 @@ def connect_bluetooth_addr(addr):
             sock.connect((addr, 1))
             sock.setblocking(False)
             return sock
-        except BluetoothError, e:
-            print e
+        except BluetoothError as e:
+            print(e)
     return None
 
 def connect_magic():
@@ -30,6 +30,6 @@ def connect_magic():
 
     for addr, name in nearby_devices:
         if name == "MindWave Mobile":
-            print "found"
+            print("found")
             return (connect_bluetooth_addr(addr), addr)
     return (None, "")
