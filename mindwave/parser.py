@@ -14,23 +14,23 @@ from datetime import datetime
     does vary. The original MindWave headset had 2.4Ghz wireless connection, using a
     proprietary USB dongle/receiver. This receiver is mounted as a serial console in
     Linux. It also requires extra commands to connect and disconnect.
-    
+
     The MindWave mobile uses bluetooth, which I would recommend over the 2.4Ghz version.
-    
+
     There have been hacks with arduinos hooked up to the Thinkgear AM modules directly.
-    
+
     Not only are the technical means of data transport different, your application needs
     one of several possible means of regularly reading the data.
-    
+
     In the EuroPython 2014 talk "Brainwaves for Hackers" I demonstrated a way to do this
     in the IPython Notebook, and that only involved a blocking read from a bluetooth socket at
     certain intervals. Pygame works the same way.
-    
+
     There are more sophisticated event loops out there, like in Kivy, Gevent or Tornado.
-    
+
     That are the reasons why there is a parser module that can be fed a stream of bytes.
     You can add recorders to the parser, which take care of analyzing the parsed data.
-    
+
     There is for example one recorder which converts the parsed data into Pandas
     Timeseries. But doing that dozens of times per second is too much work for weak
     processors, like in the Raspberry Pi, so there you would probably derive your own
@@ -51,10 +51,10 @@ class ThinkGearParser(object):
 
     def feed(self, data):
         for c in data:
-            self.parser.send(ord(c))
+            self.parser.send(c)
         for recorder in self.recorders:
             recorder.finish_chunk()
-        self.input_data += data
+        self.input_data += str(data)
     def dispatch_data(self, key, value):
         for recorder in self.recorders:
             recorder.dispatch_data(key, value)
@@ -91,7 +91,7 @@ class ThinkGearParser(object):
                                 row_length = yield
                                 a = yield
                                 b = yield
-                                value = struct.unpack("<h",chr(b)+chr(a))[0]
+                                value = struct.unpack("<h",bytearray([b, a]))[0]
                                 self.dispatch_data("raw", value)
                                 left -= 2
                             elif packet_code == 0x02: # Poor signal
@@ -101,22 +101,22 @@ class ThinkGearParser(object):
                             elif packet_code == 0x04: # Attention (eSense)
                                 a = yield
                                 if a>0:
-                                    v = struct.unpack("b",chr(a))[0]
+                                    v = struct.unpack("b",bytearray([a]))[0]
                                     if 0 < v <= 100:
                                         self.dispatch_data("attention", v)
                                 left-=1
                             elif packet_code == 0x05: # Meditation (eSense)
                                 a = yield
                                 if a>0:
-                                    v = struct.unpack("b",chr(a))[0]
+                                    v = struct.unpack("b",bytearray([a]))[0]
                                     if 0 < v <= 100:
                                         self.dispatch_data("meditation", v)
                                 left-=1
-                                
-                                
+
+
                             elif packet_code == 0x16: # Blink Strength
                                 self.current_blink_strength = yield
-                              
+
                                 left-=1
                             elif packet_code == 0x83:
                                 vlength = yield
@@ -150,16 +150,16 @@ class TimeSeriesRecorder:
             self.store = pd.HDFStore(file_name)
         else:
             self.store = None
- 
+
     def dispatch_data(self, key, value):
         if key == "attention":
             self.attention_queue.append(value)
             # Blink and "poor signal" is only sent when a blink or poor signal is detected
             # So fake continuous signal as zeros.
-            
+
             self.blink_queue.append(0)
             self.poor_signal_queue.append(0)
-            
+
         elif key == "meditation":
             self.meditation_queue.append(value)
         elif key == "raw":
@@ -168,22 +168,22 @@ class TimeSeriesRecorder:
             self.blink_queue.append(value)
             if len(self.blink_queue)>0:
                 self.blink_queue[-1] = self.current_blink_strength
- 
+
         elif key == "poor_signal":
             if len(self.poor_signal_queue)>0:
                 self.poor_signal_queue[-1] = a
 
-        
+
     def record_meditation(self, attention):
         self.meditation_queue.append()
-        
+
     def record_blink(self, attention):
         self.blink_queue.append()
-    
+
     def finish_chunk(self):
         """ called periodically to update the timeseries """
         self.meditation = pd.concat([self.meditation, queue_to_series(self.meditation_queue, freq="s")])
-        
+
         self.attention = pd.concat([self.attention, queue_to_series(self.attention_queue, freq="s")])
         self.blink = pd.concat([self.blink, queue_to_series(self.blink_queue, freq="s")])
         self.raw = pd.concat([self.raw, queue_to_series(self.raw_queue, freq="1953U")])
@@ -198,4 +198,3 @@ class TimeSeriesRecorder:
             self.store['attention'] = self.attention
             self.store['meditation'] = self.meditation
             self.store['raw'] = self.raw
-
