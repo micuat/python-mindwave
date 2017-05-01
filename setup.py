@@ -5,5 +5,5 @@ setup(
     version='0.2dev',
     packages=['mindwave',],
     license='BSD License',
-    long_description=open('README.txt').read(),
+    long_description=open('README.md').read(),
 )
