@@ -1,7 +1,6 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 import pygame, sys
-import numpy
 from numpy import *
 from pygame import *
 import scipy
@@ -10,6 +9,8 @@ from mindwave.parser import ThinkGearParser, TimeSeriesRecorder
 from mindwave.bluetooth_headset import connect_magic, connect_bluetooth_addr
 from mindwave.bluetooth_headset import BluetoothError
 from example_startup import mindwave_startup
+from pythonosc import osc_message_builder, udp_client
+import matplotlib.pyplot as plt
 
 description = """Pygame Example
 """
@@ -21,6 +22,8 @@ parser = ThinkGearParser(recorders= [recorder])
 
 def main():
     pygame.init()
+
+    client = udp_client.SimpleUDPClient("127.0.0.1", 19000)
 
     fpsClock= pygame.time.Clock()
 
@@ -38,7 +41,9 @@ def main():
     gammaColor = pygame.Color(0,255,255)
 
 
-    background_img = pygame.image.load("pygame_background.png")
+    #background_img = pygame.image.load("pygame_background.png")
+    background_img = pygame.Surface(window.get_size())
+    background_img.fill((0, 0, 0))
 
 
     font = pygame.font.Font("freesansbold.ttf", 20)
@@ -51,6 +56,7 @@ def main():
 
     record_baseline = False
     quit = False
+    raw_eeg_cursor = 0
     while quit is False:
         try:
             data = socket.recv(10000)
@@ -61,7 +67,8 @@ def main():
         if len(recorder.attention)>0:
             iteration+=1
             flen = 50
-            if len(recorder.raw)>=500:
+            if len(recorder.raw)>=512*5:
+                """
                 spectrum, relative_spectrum = bin_power(recorder.raw[-512*3:], range(flen),512)
                 spectra.append(array(relative_spectrum))
                 if len(spectra)>30:
@@ -69,7 +76,6 @@ def main():
 
                 spectrum = mean(array(spectra),axis=0)
                 for i in range (flen-1):
-                    #value = float(numpy.log10(spectrum[i]*1000) * 100)
                     value = float(spectrum[i]*1000)
                     if i<3:
                         color = deltaColor
@@ -82,6 +88,15 @@ def main():
                     else:
                         color = gammaColor
                     pygame.draw.rect(window, color, (25+i*10, 400-value, 5, value))
+                """
+                spectrum = fft.fft(recorder.raw[-512*5:])
+                for i in range (100):
+                    value = float(absolute(spectrum[i])/250)
+                    if i % 5 == 0:
+                        color = alphaColor
+                    else:
+                        color = thetaColor
+                    pygame.draw.rect(window, color, (25+i*2, 400-value, 1, value))
             else:
                 pass
             pygame.draw.circle(window, redColor, (800,200), int(recorder.attention[-1]/2))
@@ -108,6 +123,11 @@ def main():
                     v = value/ 2.0
                     pygame.draw.line(window, redColor, (i+25, 500-lv), (i+25, 500-v))
                     lv = v
+
+                for i,value in enumerate(recorder.raw[:]):
+                    if raw_eeg_cursor < i:
+                        client.send_message("/mindwave/eeg", float(value))
+                        raw_eeg_cursor = i
         else:
             img = font.render("Not receiving any data from mindwave...", False, redColor)
             window.blit(img,(100,100))
